@@ -95,7 +95,9 @@ class SerialPortWindow(QMainWindow, Ui_MainWindow):
         self.stopButton.setEnabled(False)
         self.openLedButton.setEnabled(False)
         self.closeLedButton.setEnabled(False)
-        self.guangzhaoLabel.setText("----")
+        self.guangzhaoValueLabel.setText("----")
+        self.wenduValueLabel.setText("----")
+        self.shiduValueLabel.setText("----")
         # 设置窗体标题
         # self.setWindowTitle("智能家居系统")
 
@@ -147,8 +149,8 @@ class SerialPortWindow(QMainWindow, Ui_MainWindow):
             self.openLedButton.setEnabled(True)
 
             #  启动读取串口的线程
-            self.readLux_thread = Thread(target=self.readLux)
-            self.readLux_thread.start()
+            self.readSensor_thread = Thread(target=self.readSensorData)
+            self.readSensor_thread.start()
 
         self.sendLabel.setText("--------")
         self.receiveLabel.setText("--------")
@@ -157,7 +159,7 @@ class SerialPortWindow(QMainWindow, Ui_MainWindow):
     # 定义关闭系统按钮事情处理函数
     def stop_button_click(self):
         # 停止接收串口数据的线程
-        mythread.stop_thread(self.readLux_thread)
+        mythread.stop_thread(self.readSensor_thread)
 
         # 关闭串口
         self.ser.close()
@@ -172,7 +174,9 @@ class SerialPortWindow(QMainWindow, Ui_MainWindow):
         self.openLedButton.setEnabled(False)
         self.closeLedButton.setEnabled(False)
 
-        self.wenduLabel.setText("----")
+        self.guangzhaoLabel.setText("----")
+        self.wenduValueLabel.setText("----")
+        self.shiduValueLabel.setText("----")
         self.comLabel.setText("系统已关闭")
         self.sendLabel.setText("--------")
         self.receiveLabel.setText("--------")
@@ -213,21 +217,35 @@ class SerialPortWindow(QMainWindow, Ui_MainWindow):
         else:
             self.comLabel.setText("无法发出关灯指令，请检查设备线路是否正确连接")
 
-    # 定义周期性读取并显示光照度函数
-    def readLux(self):
-       
+    # 定义周期性读取并显示传感器数据函数
+    def readSensorData(self):
         while True:
             data = self.ser.read_all()
-            text = data.decode(encoding="utf-8")
-            if len(text) >= 3 and text[0] == '3':
-                self.guangzhaoLabel.setText(text[2:])
-                self.wendu = text[2:]
+            text = data.decode(encoding="utf-8").strip()
+            if text:
                 current_time = datetime.datetime.now()
                 self.receiveLabel.setText(str(current_time) + "收到： " + text)
-                self.json_wendu = f'{{"id":"123","version":"1.0","params":{{"wendu":{{"value":{self.wendu}}}}}}}'
-                self.mqttc.publish(self.Pub_topic1, self.json_wendu, qos=0)
-                print("publish wendu2:",self.wendu, type(self.wendu))
-                print(self.json_wendu)
+                
+                # 解析传感器数据
+                if len(text) >= 3:
+                    # 光照度数据格式：3:xxx
+                    if text[0] == '3':
+                        guangzhao = text[2:]
+                          self.guangzhaoValueLabel.setText(guangzhao)
+                        self.json_guangzhao = f'{{"id":"123","version":"1.0","params":{{"guangzhao":{{"value":{guangzhao}}}}}}}'
+                        self.mqttc.publish(self.Pub_topic1, self.json_guangzhao, qos=0)
+                    # 温度数据格式：4:xxx
+                    elif text[0] == '4':
+                        wendu = text[2:]
+                        self.wenduValueLabel.setText(wendu)
+                        self.json_wendu = f'{{"id":"123","version":"1.0","params":{{"wendu":{{"value":{wendu}}}}}}}'
+                        self.mqttc.publish(self.Pub_topic1, self.json_wendu, qos=0)
+                    # 湿度数据格式：5:xxx
+                    elif text[0] == '5':
+                        shidu = text[2:]
+                        self.shiduValueLabel.setText(shidu)
+                        self.json_shidu = f'{{"id":"123","version":"1.0","params":{{"shidu":{{"value":{shidu}}}}}}}'
+                        self.mqttc.publish(self.Pub_topic1, self.json_shidu, qos=0)
 
     # 认证token生成函数
     def get_token(self, id, access_key):
